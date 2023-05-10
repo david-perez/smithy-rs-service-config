@@ -1,0 +1,14 @@
+[package]
+name = "service"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = { version = "0.14.25", features = ["server"] }
+tokio = "1.26.0"
+tracing = "0.1"
+# Generated using smithy-rs a78ac591fe4d969158bddabd4d6b1bf7a396cd5c
+simple = { path = "../sdk" }
