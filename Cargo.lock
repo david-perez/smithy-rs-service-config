@@ -570,6 +570,7 @@ dependencies = [
 name = "service"
 version = "0.1.0"
 dependencies = [
+ "aws-smithy-http-server",
  "hyper",
  "simple",
  "tokio",
