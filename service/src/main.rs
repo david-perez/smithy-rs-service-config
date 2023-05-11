@@ -4,10 +4,11 @@ use std::net::SocketAddr;
 #[tokio::main]
 async fn main() {
     let config = Config::builder()
-        //.plugin(PluginRunsBeforeAuthenticate)
-        // If we don't call this to configure it then `build()` will yield an error.
+        // .plugin(PluginRunsBeforeAuthenticate)
+        // Applies authz plugin; fails to build because authn must go before authz.
+        // .aws_auth_authorize("authorizer".to_owned())
         .aws_auth_authenticate("authenticator".to_owned()) // Applies authn plugin
-        //.plugin(PluginRunsAfterAuthenticate)
+        // .plugin(PluginRunsAfterAuthenticate)
         .build()
         .expect("failed to build configuration for service");
 

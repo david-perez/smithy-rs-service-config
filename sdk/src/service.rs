@@ -286,7 +286,9 @@ impl Config<()> {
     pub fn builder() -> config::Builder<IdentityPlugin> {
         config::Builder {
             plugin_pipeline: aws_smithy_http_server::plugin::PluginPipeline::default(),
-            aws_auth_authenticate_configured: false,
+            aws_auth_authenticate_inserted_at: None,
+            aws_auth_authorize_inserted_at: None,
+            plugin_count: 0,
         }
     }
 }
@@ -298,23 +300,12 @@ pub mod config {
     // This follows the same pattern as `MissingOperationsError`.
     #[derive(Debug)]
     pub struct Error {
-        config_name_to_setter_methods: std::collections::HashMap<&'static str, &'static str>,
+        msg: String,
     }
 
     impl std::fmt::Display for Error {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(f, "You must configure the following for `SimpleService`.")?;
-            for config_name in self.config_name_to_setter_methods.keys() {
-                writeln!(f, "- {}", config_name)?;
-            }
-
-            writeln!(
-                f,
-                "\nUse the dedicated methods on `Config` to configure things:"
-            )?;
-            for setter_name in self.config_name_to_setter_methods.values() {
-                writeln!(f, "- {}", setter_name)?;
-            }
+            writeln!(f, "{}", self.msg)?;
             Ok(())
         }
     }
@@ -324,8 +315,12 @@ pub mod config {
     pub struct Builder<Plugin> {
         pub(super) plugin_pipeline: PluginPipeline<Plugin>,
 
-        // There's one boolean per thing that must be configured.
-        pub(super) aws_auth_authenticate_configured: bool,
+        // There's one `usize` per thing that must be configured, tracking
+        // the index of when the plugin was inserted.
+        pub(super) aws_auth_authenticate_inserted_at: Option<usize>,
+        pub(super) aws_auth_authorize_inserted_at: Option<usize>,
+
+        pub(super) plugin_count: usize,
     }
 
     impl<Plugin> Builder<Plugin> {
@@ -336,7 +331,9 @@ pub mod config {
         ) -> Builder<PluginStack<NewPlugin, Plugin>> {
             Builder {
                 plugin_pipeline: self.plugin_pipeline.push(plugin),
-                aws_auth_authenticate_configured: self.aws_auth_authenticate_configured,
+                aws_auth_authenticate_inserted_at: self.aws_auth_authenticate_inserted_at,
+                aws_auth_authorize_inserted_at: self.aws_auth_authorize_inserted_at,
+                plugin_count: self.plugin_count + 1,
             }
         }
 
@@ -349,7 +346,21 @@ pub mod config {
         ) -> Builder<PluginStack<IdentityPlugin, Plugin>> {
             Builder {
                 plugin_pipeline: self.plugin_pipeline.push(IdentityPlugin),
-                aws_auth_authenticate_configured: true,
+                aws_auth_authenticate_inserted_at: Some(self.plugin_count),
+                aws_auth_authorize_inserted_at: self.aws_auth_authorize_inserted_at,
+                plugin_count: self.plugin_count + 1,
+            }
+        }
+
+        pub fn aws_auth_authorize(
+            self,
+            _authorizer: String,
+        ) -> Builder<PluginStack<IdentityPlugin, Plugin>> {
+            Builder {
+                plugin_pipeline: self.plugin_pipeline.push(IdentityPlugin),
+                aws_auth_authenticate_inserted_at: self.aws_auth_authenticate_inserted_at,
+                aws_auth_authorize_inserted_at: Some(self.plugin_count),
+                plugin_count: self.plugin_count + 1,
             }
         }
 
@@ -359,21 +370,51 @@ pub mod config {
         // configuration at runtime.
         pub fn build(self) -> Result<super::Config<PluginPipeline<Plugin>>, Error> {
             let mut config_name_to_setter_methods = std::collections::HashMap::new();
-            if !self.aws_auth_authenticate_configured {
+            if self.aws_auth_authenticate_inserted_at.is_none() {
                 config_name_to_setter_methods.insert(
                     "AWS Auth authenticate is not configured",
                     "aws_auth_authenticate",
                 );
             }
 
-            match config_name_to_setter_methods.is_empty() {
-                true => Ok(super::Config {
-                    plugin: self.plugin_pipeline,
-                }),
-                false => Err(Error {
-                    config_name_to_setter_methods,
-                }),
+            // Authz is not mandatory!
+            // if self.aws_auth_authorize_inserted_at.is_none() {
+            //     config_name_to_setter_methods
+            //         .insert("AWS Auth authorize is not configured", "aws_auth_authorize");
+            // }
+
+            if !config_name_to_setter_methods.is_empty() {
+                let mut msg = "You must configure the following for `SimpleService`.".to_owned();
+                for config_name in config_name_to_setter_methods.keys() {
+                    msg += &format!("\n- {}", config_name);
+                }
+                msg += "\nUse the dedicated methods on `Config` to configure things:";
+                for setter_name in config_name_to_setter_methods.values() {
+                    msg += &format!("\n- `{}`", setter_name);
+                }
+
+                return Err(Error { msg });
             }
+
+            let panic_msg = "this should never panic since we are supposed to check beforehand that all required things have been configured; please file a bug report under https://github.com/awslabs/smithy-rs/issues";
+
+            let aws_auth_authenticate_inserted_at =
+                self.aws_auth_authenticate_inserted_at.expect(panic_msg);
+            let aws_auth_authorize_inserted_at =
+                self.aws_auth_authenticate_inserted_at.expect(panic_msg);
+            let mut msg = String::new(); // Doesn't allocate.
+
+            if aws_auth_authorize_inserted_at <= aws_auth_authenticate_inserted_at {
+                msg += "Authentication must be configured before authorization. Call `aws_auth_authenticate` before `aws_auth_authorize`."
+            }
+
+            if !msg.is_empty() {
+                return Err(Error { msg });
+            }
+
+            Ok(super::Config {
+                plugin: self.plugin_pipeline,
+            })
         }
     }
 }
