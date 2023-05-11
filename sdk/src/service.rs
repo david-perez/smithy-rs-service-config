@@ -205,11 +205,37 @@ pub struct SimpleService<S = aws_smithy_http_server::routing::Route> {
 }
 
 impl SimpleService<()> {
+    #[doc(hidden)]
     pub fn builder<Body, Plugin>(config: Config<Plugin>) -> SimpleServiceBuilder<Body, Plugin> {
         SimpleServiceBuilder {
             operation: None,
             config,
         }
+    }
+
+    /// Constructs a builder for [`SimpleService`].
+    /// You must specify what plugins should be applied to the operations in this service.
+    ///
+    /// Use [`SimpleService::builder_without_plugins`] if you don't need to apply plugins.
+    ///
+    /// Check out [`PluginPipeline`](aws_smithy_http_server::plugin::PluginPipeline) if you need to apply
+    /// multiple plugins.
+    pub fn builder_with_plugins<Body, Plugin>(
+        plugin: Plugin,
+    ) -> SimpleServiceBuilder<Body, Plugin> {
+        let config = Config { plugin };
+        SimpleServiceBuilder {
+            operation: None,
+            config,
+        }
+    }
+
+    /// Constructs a builder for [`SimpleService`].
+    ///
+    /// Use [`SimpleService::builder_with_plugins`] if you need to specify plugins.
+    pub fn builder_without_plugins<Body>(
+    ) -> SimpleServiceBuilder<Body, aws_smithy_http_server::plugin::IdentityPlugin> {
+        Self::builder_with_plugins(aws_smithy_http_server::plugin::IdentityPlugin)
     }
 }
 
