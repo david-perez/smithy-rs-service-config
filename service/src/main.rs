@@ -1,9 +1,17 @@
-use simple::SimpleService;
+use simple::{Config, SimpleService};
 use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
-    let app = SimpleService::builder_without_plugins()
+    let config = Config::builder()
+        //.plugin(PluginRunsBeforeAuthenticate)
+        // If we don't call this to configure it then `build()` will yield an error.
+        .aws_auth_authenticate("authenticator".to_owned()) // Applies authn plugin
+        //.plugin(PluginRunsAfterAuthenticate)
+        .build()
+        .expect("failed to build configuration for service");
+
+    let app = SimpleService::builder(config)
         .operation(operation)
         .build()
         .expect("failed to build an instance of SimpleService");

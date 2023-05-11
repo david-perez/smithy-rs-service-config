@@ -175,7 +175,9 @@
 //! [operations]: https://smithy.io/2.0/spec/service-types.html#operation
 //! [hyper server]: https://docs.rs/hyper/latest/hyper/server/index.html
 //! [Service]: https://docs.rs/tower-service/latest/tower_service/trait.Service.html
-pub use crate::service::{MissingOperationsError, SimpleService, SimpleServiceBuilder};
+pub use crate::service::{
+    config, Config, MissingOperationsError, SimpleService, SimpleServiceBuilder,
+};
 
 /// Crate version number.
 pub static PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
