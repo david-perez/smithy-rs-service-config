@@ -31,7 +31,8 @@
 //! # async fn dummy() {
 //! use simple::SimpleService;
 //!
-//! # let app = SimpleService::builder_without_plugins().build_unchecked();
+//! # let config = simple::Config::builder().build();
+//! # let app = SimpleService::builder(config).build_unchecked();
 //! let server = app.into_make_service();
 //! let bind: SocketAddr = "127.0.0.1:6969".parse()
 //!     .expect("unable to parse the server bind address and port");
@@ -41,14 +42,16 @@
 //!
 //! ### Running on Lambda
 //!
-//! This requires the `aws-lambda` feature flag to be passed to the [`::aws_smithy_http_server`] crate.
+//! This requires the `aws-lambda` feature flag to be enabled in the [`::aws_smithy_http_server`] crate.
 //!
 //! ```rust,ignore
 //! use ::aws_smithy_http_server::routing::LambdaHandler;
 //! use simple::SimpleService;
+//! # use simple::Config;
 //!
 //! # async fn dummy() {
-//! # let app = SimpleService::builder_without_plugins().build_unchecked();
+//! # let config = simple::Config::builder().build();
+//! # let app = SimpleService::builder(config).build_unchecked();
 //! let handler = LambdaHandler::new(app);
 //! lambda_http::run(handler).await.unwrap();
 //! # }
@@ -56,28 +59,40 @@
 //!
 //! # Building the SimpleService
 //!
-//! To construct [`SimpleService`] we use [`SimpleServiceBuilder`] returned by [`SimpleService::builder_without_plugins`]
-//! or [`SimpleService::builder_with_plugins`].
+//! Constructing the [`SimpleService`] entails two steps:
 //!
-//! ## Plugins
+//! 1. Building the service configration.
+//! 2. Registering the handlers.
 //!
-//! The [`SimpleService::builder_with_plugins`] method, returning [`SimpleServiceBuilder`],
-//! accepts a plugin marked with [`HttpMarker`](aws_smithy_http_server::plugin::HttpMarker) and a
-//! plugin marked with [`ModelMarker`](aws_smithy_http_server::plugin::ModelMarker).
-//! Plugins allow you to build middleware which is aware of the operation it is being applied to.
+//! To construct [`SimpleService`] we use [`SimpleServiceBuilder`] returned by
+//! [`SimpleService::builder`], but we first need to pass in the configuration of the service using
+//! [`Config`].
 //!
-//! ```rust
+//! ## Service configuration
+//!
+//! You define your service's configuration using [`Config`], which you can build with
+//! [`Config::builder`].
+//!
+//! [`Config`] allows you to register:
+//! 1. Layers that get enacted _before routing_.
+//! 2. HTTP plugins that run after routing, but _before HTTP request deserialization_.
+//! 3. Model plugins that run after routing, and _after HTTP request deserialization_.
+//!
+//! HTTP plugins are those marked with [`HttpMarker`](aws_smithy_http_server::plugin::HttpMarker),
+//! while model plugins are those marked with
+//! [`ModelMarker`](aws_smithy_http_server::plugin::ModelMarker). Plugins allow you to build
+//! middleware which is aware of the operation it is being applied to.
+//!
+//! ```no_run
 //! # use ::aws_smithy_http_server::plugin::IdentityPlugin;
 //! # use ::aws_smithy_http_server::plugin::IdentityPlugin as LoggingPlugin;
 //! # use ::aws_smithy_http_server::plugin::IdentityPlugin as MetricsPlugin;
 //! # use ::hyper::Body;
 //! use ::aws_smithy_http_server::plugin::HttpPlugins;
-//! use simple::{SimpleService, SimpleServiceBuilder};
+//! use simple::{Config, SimpleService, SimpleServiceBuilder};
 //!
-//! let http_plugins = HttpPlugins::new()
-//!         .push(LoggingPlugin)
-//!         .push(MetricsPlugin);
-//! let builder: SimpleServiceBuilder<Body, _, _> = SimpleService::builder_with_plugins(http_plugins, IdentityPlugin);
+//! let config = Config::builder().http_plugin(LoggingPlugin).build();
+//! let builder: SimpleServiceBuilder<Body, _, _, _> = SimpleService::builder(config);
 //! ```
 //!
 //! Check out [`::aws_smithy_http_server::plugin`] to learn more about plugins.
@@ -143,24 +158,25 @@
 //!
 //! ```rust
 //! # use std::net::SocketAddr;
-//! use simple::SimpleService;
+//! use simple::{Config, SimpleService};
 //!
 //! #[::tokio::main]
 //! pub async fn main() {
-//!    let app = SimpleService::builder_without_plugins()
-//!        .operation(operation)
-//!        .build()
-//!        .expect("failed to build an instance of SimpleService");
+//!     let config = Config::builder().build();
+//!     let app = SimpleService::builder(config)
+//!         .operation(operation)
+//!         .build()
+//!         .expect("failed to build an instance of SimpleService");
 //!
-//!    let bind: SocketAddr = "127.0.0.1:6969".parse()
-//!        .expect("unable to parse the server bind address and port");
-//!    let server = ::hyper::Server::bind(&bind).serve(app.into_make_service());
-//!    # let server = async { Ok::<_, ()>(()) };
+//!     let bind: SocketAddr = "127.0.0.1:6969".parse()
+//!         .expect("unable to parse the server bind address and port");
+//!     let server = ::hyper::Server::bind(&bind).serve(app.into_make_service());
+//!     # let server = async { Ok::<_, ()>(()) };
 //!
-//!    // Run your service!
-//!    if let Err(err) = server.await {
-//!        eprintln!("server error: {:?}", err);
-//!    }
+//!     // Run your service!
+//!     if let Err(err) = server.await {
+//!         eprintln!("server error: {:?}", err);
+//!     }
 //! }
 //!
 //! use simple::{input, output};
@@ -177,7 +193,9 @@
 //! [operations]: https://smithy.io/2.0/spec/service-types.html#operation
 //! [hyper server]: https://docs.rs/hyper/latest/hyper/server/index.html
 //! [Service]: https://docs.rs/tower-service/latest/tower_service/trait.Service.html
-pub use crate::service::{MissingOperationsError, SimpleService, SimpleServiceBuilder};
+pub use crate::service::{
+    config, Config, MissingOperationsError, SimpleService, SimpleServiceBuilder,
+};
 
 /// Crate version number.
 pub static PKG_VERSION: &str = env!("CARGO_PKG_VERSION");

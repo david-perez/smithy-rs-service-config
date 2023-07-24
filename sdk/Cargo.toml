@@ -7,7 +7,7 @@ description = "test"
 edition = "2021"
 
 [package.metadata.smithy]
-codegen-version = "0.0.0-smithy-rs-head-e060135e0176677504c1d17dbbc5e6556aeee0ca"
+codegen-version = "0.0.0-smithy-rs-head-50dbc1f023b082b028293b9dbde16a16865ee404"
 [dependencies.aws-smithy-http]
 path = "/home/ANT.AMAZON.COM/davidpz/code/smithy-rs-main/rust-runtime/aws-smithy-http"
 [dependencies.aws-smithy-http-server]

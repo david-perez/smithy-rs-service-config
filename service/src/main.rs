@@ -1,9 +1,18 @@
-use simple::SimpleService;
+use aws_smithy_http_server::{
+    instrumentation::InstrumentPlugin, layer::alb_health_check::AlbHealthCheckLayer,
+};
+use simple::{Config, SimpleService};
 use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
-    let app = SimpleService::builder_without_plugins()
+    let health_check_layer =
+        AlbHealthCheckLayer::from_handler("/ping", |_req| async { http::status::StatusCode::OK });
+    let config = Config::builder()
+        .http_plugin(InstrumentPlugin)
+        .layer(&health_check_layer)
+        .build();
+    let app = SimpleService::builder(config)
         .operation(operation)
         .build()
         .expect("failed to build an instance of SimpleService");
