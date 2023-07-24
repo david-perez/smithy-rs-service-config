@@ -7,7 +7,7 @@ description = "test"
 edition = "2021"
 
 [package.metadata.smithy]
-codegen-version = "0.0.0-smithy-rs-head-c6d3679093c4698d1446385d679677d035ad4d7f"
+codegen-version = "0.0.0-smithy-rs-head-e060135e0176677504c1d17dbbc5e6556aeee0ca"
 [dependencies.aws-smithy-http]
 path = "/home/ANT.AMAZON.COM/davidpz/code/smithy-rs-main/rust-runtime/aws-smithy-http"
 [dependencies.aws-smithy-http-server]
@@ -25,7 +25,7 @@ version = "0.2.9"
 [dependencies.http-body]
 version = "0.4.4"
 [dependencies.hyper]
-version = "0.14.12"
+version = "0.14.26"
 [dependencies.mime]
 version = "0.3"
 [dependencies.pin-project-lite]
@@ -34,6 +34,8 @@ version = "0.2"
 version = "0.4"
 [dependencies.tracing]
 version = "0.1"
+[dev-dependencies.hyper]
+version = "0.14.12"
 [dev-dependencies.tokio]
 version = "1.23.1"
 [features]

@@ -19,8 +19,8 @@
 //!
 //! # Using SimpleService
 //!
-//! The primary entrypoint is [`SimpleService`]: it satisfies the [`Service<http::Request, Response = http::Response>`](tower::Service)
-//! trait and therefore can be handed to a [`hyper` server](https://github.com/hyperium/hyper) via [`SimpleService::into_make_service`] or used in Lambda via [`LambdaHandler`](aws_smithy_http_server::routing::LambdaHandler).
+//! The primary entrypoint is [`SimpleService`]: it satisfies the [`Service<http::Request, Response = http::Response>`](::tower::Service)
+//! trait and therefore can be handed to a [`hyper` server](https://github.com/hyperium/hyper) via [`SimpleService::into_make_service`] or used in Lambda via [`LambdaHandler`](::aws_smithy_http_server::routing::LambdaHandler).
 //! The [`crate::input`], and [`crate::output`],
 //! modules provide the types used in each operation.
 //!
@@ -35,16 +35,16 @@
 //! let server = app.into_make_service();
 //! let bind: SocketAddr = "127.0.0.1:6969".parse()
 //!     .expect("unable to parse the server bind address and port");
-//! hyper::Server::bind(&bind).serve(server).await.unwrap();
+//! ::hyper::Server::bind(&bind).serve(server).await.unwrap();
 //! # }
 //! ```
 //!
 //! ### Running on Lambda
 //!
-//! This requires the `aws-lambda` feature flag to be passed to the [`aws_smithy_http_server`] crate.
+//! This requires the `aws-lambda` feature flag to be passed to the [`::aws_smithy_http_server`] crate.
 //!
 //! ```rust,ignore
-//! use aws_smithy_http_server::routing::LambdaHandler;
+//! use ::aws_smithy_http_server::routing::LambdaHandler;
 //! use simple::SimpleService;
 //!
 //! # async fn dummy() {
@@ -62,30 +62,32 @@
 //! ## Plugins
 //!
 //! The [`SimpleService::builder_with_plugins`] method, returning [`SimpleServiceBuilder`],
-//! accepts a [`Plugin`](aws_smithy_http_server::plugin::Plugin).
+//! accepts a plugin marked with [`HttpMarker`](aws_smithy_http_server::plugin::HttpMarker) and a
+//! plugin marked with [`ModelMarker`](aws_smithy_http_server::plugin::ModelMarker).
 //! Plugins allow you to build middleware which is aware of the operation it is being applied to.
 //!
 //! ```rust
-//! # use aws_smithy_http_server::plugin::IdentityPlugin as LoggingPlugin;
-//! # use aws_smithy_http_server::plugin::IdentityPlugin as MetricsPlugin;
-//! # use hyper::Body;
-//! use aws_smithy_http_server::plugin::PluginPipeline;
+//! # use ::aws_smithy_http_server::plugin::IdentityPlugin;
+//! # use ::aws_smithy_http_server::plugin::IdentityPlugin as LoggingPlugin;
+//! # use ::aws_smithy_http_server::plugin::IdentityPlugin as MetricsPlugin;
+//! # use ::hyper::Body;
+//! use ::aws_smithy_http_server::plugin::HttpPlugins;
 //! use simple::{SimpleService, SimpleServiceBuilder};
 //!
-//! let plugins = PluginPipeline::new()
+//! let http_plugins = HttpPlugins::new()
 //!         .push(LoggingPlugin)
 //!         .push(MetricsPlugin);
-//! let builder: SimpleServiceBuilder<Body, _> = SimpleService::builder_with_plugins(plugins);
+//! let builder: SimpleServiceBuilder<Body, _, _> = SimpleService::builder_with_plugins(http_plugins, IdentityPlugin);
 //! ```
 //!
-//! Check out [`aws_smithy_http_server::plugin`] to learn more about plugins.
+//! Check out [`::aws_smithy_http_server::plugin`] to learn more about plugins.
 //!
 //! ## Handlers
 //!
 //! [`SimpleServiceBuilder`] provides a setter method for each operation in your Smithy model. The setter methods expect an async function as input, matching the signature for the corresponding operation in your Smithy model.
 //! We call these async functions **handlers**. This is where your application business logic lives.
 //!
-//! Every handler must take an `Input`, and optional [`extractor arguments`](aws_smithy_http_server::request), while returning:
+//! Every handler must take an `Input`, and optional [`extractor arguments`](::aws_smithy_http_server::request), while returning:
 //!
 //! * A `Result<Output, Error>` if your operation has modeled errors, or
 //! * An `Output` otherwise.
@@ -107,7 +109,7 @@
 //! # struct Error;
 //! # struct State;
 //! # use std::net::SocketAddr;
-//! use aws_smithy_http_server::request::{extension::Extension, connect_info::ConnectInfo};
+//! use ::aws_smithy_http_server::request::{extension::Extension, connect_info::ConnectInfo};
 //!
 //! async fn handler_with_no_extensions(input: Input) -> Output {
 //!     todo!()
@@ -126,7 +128,7 @@
 //! }
 //! ```
 //!
-//! See the [`operation module`](aws_smithy_http_server::operation) for information on precisely what constitutes a handler.
+//! See the [`operation module`](::aws_smithy_http_server::operation) for information on precisely what constitutes a handler.
 //!
 //! ## Build
 //!
@@ -143,7 +145,7 @@
 //! # use std::net::SocketAddr;
 //! use simple::SimpleService;
 //!
-//! #[tokio::main]
+//! #[::tokio::main]
 //! pub async fn main() {
 //!    let app = SimpleService::builder_without_plugins()
 //!        .operation(operation)
@@ -152,7 +154,7 @@
 //!
 //!    let bind: SocketAddr = "127.0.0.1:6969".parse()
 //!        .expect("unable to parse the server bind address and port");
-//!    let server = hyper::Server::bind(&bind).serve(app.into_make_service());
+//!    let server = ::hyper::Server::bind(&bind).serve(app.into_make_service());
 //!    # let server = async { Ok::<_, ()>(()) };
 //!
 //!    // Run your service!
@@ -191,38 +193,11 @@ pub mod operation;
 
 /// A collection of types representing each operation defined in the service closure.
 ///
-/// # Constructing an [`Operation`](aws_smithy_http_server::operation::OperationShapeExt)
-///
-/// To apply middleware to specific operations the [`Operation`](aws_smithy_http_server::operation::Operation)
-/// API must be used.
-///
-/// Using the [`OperationShapeExt`](aws_smithy_http_server::operation::OperationShapeExt) trait
-/// implemented on each ZST we can construct an [`Operation`](aws_smithy_http_server::operation::Operation)
-/// with appropriate constraints given by Smithy.
-///
-/// ## Example
-///
-/// ```no_run
-/// use simple::operation_shape::Operation;
-/// use aws_smithy_http_server::operation::OperationShapeExt;
-///
-/// use simple::{input, output};
-///
-/// async fn handler(input: input::OperationInput) -> output::OperationOutput {
-///     todo!()
-/// }
-///
-/// let operation = Operation::from_handler(handler)
-///     .layer(todo!("Provide a layer implementation"));
-/// ```
-///
-/// # Use as Marker Structs
-///
-/// The [plugin system](aws_smithy_http_server::plugin) also makes use of these
+/// The [plugin system](::aws_smithy_http_server::plugin) makes use of these
 /// [zero-sized types](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZSTs) to
-/// parameterize [`Plugin`](aws_smithy_http_server::plugin::Plugin) implementations. The traits, such as
-/// [`OperationShape`](aws_smithy_http_server::operation::OperationShape) can be used to provide
-/// operation specific information to the [`Layer`](tower::Layer) being applied.
+/// parameterize [`Plugin`](::aws_smithy_http_server::plugin::Plugin) implementations. Their traits, such as
+/// [`OperationShape`](::aws_smithy_http_server::operation::OperationShape), can be used to provide
+/// operation specific information to the [`Layer`](::tower::Layer) being applied.
 pub mod operation_shape;
 
 /// Output structures for operations. Documentation on these types is copied from the model.

@@ -2,16 +2,17 @@
 /// The service builder for [`SimpleService`].
 ///
 /// Constructed via [`SimpleService::builder_with_plugins`] or [`SimpleService::builder_without_plugins`].
-pub struct SimpleServiceBuilder<Body, Plugin> {
-    operation: Option<aws_smithy_http_server::routing::Route<Body>>,
-    plugin: Plugin,
+pub struct SimpleServiceBuilder<Body, HttpPl, ModelPl> {
+    operation: Option<::aws_smithy_http_server::routing::Route<Body>>,
+    http_plugin: HttpPl,
+    model_plugin: ModelPl,
 }
 
-impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
+impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     /// Sets the [`Operation`](crate::operation_shape::Operation) operation.
     ///
-    /// This should be an async function satisfying the [`Handler`](aws_smithy_http_server::operation::Handler) trait.
-    /// See the [operation module documentation](aws_smithy_http_server::operation) for more information.
+    /// This should be an async function satisfying the [`Handler`](::aws_smithy_http_server::operation::Handler) trait.
+    /// See the [operation module documentation](::aws_smithy_http_server::operation) for more information.
     ///
     /// # Example
     ///
@@ -29,57 +30,135 @@ impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
     ///     /* Set other handlers */
     ///     .build()
     ///     .unwrap();
-    /// # let app: SimpleService<aws_smithy_http_server::routing::Route<aws_smithy_http::body::SdkBody>> = app;
+    /// # let app: SimpleService<::aws_smithy_http_server::routing::Route<::aws_smithy_http::body::SdkBody>> = app;
     /// ```
     ///
-    pub fn operation<HandlerType, HandlerExtractors, ServiceExtractors>(
-        self,
-        handler: HandlerType,
-    ) -> Self
-    where
-        HandlerType: aws_smithy_http_server::operation::Handler<
-            crate::operation_shape::Operation,
-            HandlerExtractors,
-        >,
-        aws_smithy_http_server::operation::Operation<
-            aws_smithy_http_server::operation::IntoService<
-                crate::operation_shape::Operation,
-                HandlerType,
-            >,
-        >: aws_smithy_http_server::operation::Upgradable<
-            aws_smithy_http_server::proto::rest_json_1::RestJson1,
-            crate::operation_shape::Operation,
-            ServiceExtractors,
-            Body,
-            Plugin,
-        >,
-    {
-        use aws_smithy_http_server::operation::OperationShapeExt;
-        self.operation_operation(crate::operation_shape::Operation::from_handler(handler))
+                pub fn operation<HandlerType, HandlerExtractors, UpgradeExtractors>(self, handler: HandlerType) -> Self
+                where
+                    HandlerType: ::aws_smithy_http_server::operation::Handler<crate::operation_shape::Operation, HandlerExtractors>,
+
+                    ModelPl: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        ::aws_smithy_http_server::operation::IntoService<crate::operation_shape::Operation, HandlerType>
+                    >,
+                    ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        ModelPl::Output
+                    >,
+                    HttpPl: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        <
+                            ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>
+                            as ::aws_smithy_http_server::plugin::Plugin<
+                                SimpleService,
+                                crate::operation_shape::Operation,
+                                ModelPl::Output
+                            >
+                        >::Output
+                    >,
+
+                    HttpPl::Output: ::tower::Service<::http::Request<Body>, Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
+                    <HttpPl::Output as ::tower::Service<::http::Request<Body>>>::Future: Send + 'static,
+
+                {
+        use ::aws_smithy_http_server::operation::OperationShapeExt;
+        use ::aws_smithy_http_server::plugin::Plugin;
+        let svc = crate::operation_shape::Operation::from_handler(handler);
+        let svc = self.model_plugin.apply(svc);
+        let svc = ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>::new()
+            .apply(svc);
+        let svc = self.http_plugin.apply(svc);
+        self.operation_custom(svc)
     }
 
     /// Sets the [`Operation`](crate::operation_shape::Operation) operation.
     ///
-    /// This should be an [`Operation`](aws_smithy_http_server::operation::Operation) created from
-    /// [`Operation`](crate::operation_shape::Operation) using either
-    /// [`OperationShape::from_handler`](aws_smithy_http_server::operation::OperationShapeExt::from_handler) or
-    /// [`OperationShape::from_service`](aws_smithy_http_server::operation::OperationShapeExt::from_service).
-    pub fn operation_operation<Operation, Extractors>(mut self, operation: Operation) -> Self
+    /// This should be an async function satisfying the [`Handler`](::aws_smithy_http_server::operation::Handler) trait.
+    /// See the [operation module documentation](::aws_smithy_http_server::operation) for more information.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use simple::SimpleService;
+    ///
+    /// use simple::{input, output};
+    ///
+    /// async fn handler(input: input::OperationInput) -> Result<output::OperationOutput, std::convert::Infallible> {
+    ///     todo!()
+    /// }
+    ///
+    /// let svc = ::tower::util::service_fn(handler);
+    /// let app = SimpleService::builder_without_plugins()
+    ///     .operation_service(svc)
+    ///     /* Set other handlers */
+    ///     .build()
+    ///     .unwrap();
+    /// # let app: SimpleService<::aws_smithy_http_server::routing::Route<::aws_smithy_http::body::SdkBody>> = app;
+    /// ```
+    ///
+                pub fn operation_service<S, ServiceExtractors, UpgradeExtractors>(self, service: S) -> Self
+                where
+                    S: ::aws_smithy_http_server::operation::OperationService<crate::operation_shape::Operation, ServiceExtractors>,
+
+                    ModelPl: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        ::aws_smithy_http_server::operation::Normalize<crate::operation_shape::Operation, S>
+                    >,
+                    ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        ModelPl::Output
+                    >,
+                    HttpPl: ::aws_smithy_http_server::plugin::Plugin<
+                        SimpleService,
+                        crate::operation_shape::Operation,
+                        <
+                            ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>
+                            as ::aws_smithy_http_server::plugin::Plugin<
+                                SimpleService,
+                                crate::operation_shape::Operation,
+                                ModelPl::Output
+                            >
+                        >::Output
+                    >,
+
+                    HttpPl::Output: ::tower::Service<::http::Request<Body>, Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>, Error = ::std::convert::Infallible> + Clone + Send + 'static,
+                    <HttpPl::Output as ::tower::Service<::http::Request<Body>>>::Future: Send + 'static,
+
+                {
+        use ::aws_smithy_http_server::operation::OperationShapeExt;
+        use ::aws_smithy_http_server::plugin::Plugin;
+        let svc = crate::operation_shape::Operation::from_service(service);
+        let svc = self.model_plugin.apply(svc);
+        let svc = ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>::new()
+            .apply(svc);
+        let svc = self.http_plugin.apply(svc);
+        self.operation_custom(svc)
+    }
+
+    /// Sets the [`Operation`](crate::operation_shape::Operation) to a custom [`Service`](tower::Service).
+    /// not constrained by the Smithy contract.
+    fn operation_custom<S>(mut self, svc: S) -> Self
     where
-        Operation: aws_smithy_http_server::operation::Upgradable<
-            aws_smithy_http_server::proto::rest_json_1::RestJson1,
-            crate::operation_shape::Operation,
-            Extractors,
-            Body,
-            Plugin,
-        >,
+        S: ::tower::Service<
+                ::http::Request<Body>,
+                Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>,
+                Error = ::std::convert::Infallible,
+            > + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
     {
-        self.operation = Some(operation.upgrade(&self.plugin));
+        self.operation = Some(::aws_smithy_http_server::routing::Route::new(svc));
         self
     }
 }
 
-impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
+impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     /// Constructs a [`SimpleService`] from the arguments provided to the builder.
     ///
     /// Forgetting to register a handler for one or more operations will result in an error.
@@ -88,14 +167,14 @@ impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
     /// unspecified route requested.
     pub fn build(
         self,
-    ) -> Result<SimpleService<aws_smithy_http_server::routing::Route<Body>>, MissingOperationsError>
+    ) -> Result<SimpleService<::aws_smithy_http_server::routing::Route<Body>>, MissingOperationsError>
     {
         let router = {
-            use aws_smithy_http_server::operation::OperationShape;
+            use ::aws_smithy_http_server::operation::OperationShape;
             let mut missing_operation_names = std::collections::HashMap::new();
             if self.operation.is_none() {
                 missing_operation_names
-                    .insert(crate::operation_shape::Operation::NAME, ".operation()");
+                    .insert(crate::operation_shape::Operation::ID, ".operation()");
             }
             if !missing_operation_names.is_empty() {
                 return Err(MissingOperationsError {
@@ -104,13 +183,13 @@ impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
             }
             let unexpected_error_msg = "this should never panic since we are supposed to check beforehand that a handler has been registered for this operation; please file a bug report under https://github.com/awslabs/smithy-rs/issues";
 
-            aws_smithy_http_server::proto::rest::router::RestRouter::from_iter([(
+            ::aws_smithy_http_server::protocol::rest::router::RestRouter::from_iter([(
                 request_specs::operation(),
                 self.operation.expect(unexpected_error_msg),
             )])
         };
         Ok(SimpleService {
-            router: aws_smithy_http_server::routing::RoutingService::new(router),
+            router: ::aws_smithy_http_server::routing::RoutingService::new(router),
         })
     }
 
@@ -119,24 +198,21 @@ impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
     ///
     /// Check out [`SimpleServiceBuilder::build`] if you'd prefer the builder to fail if one or more operations do
     /// not have a registered handler.
-    pub fn build_unchecked(self) -> SimpleService<aws_smithy_http_server::routing::Route<Body>>
+    pub fn build_unchecked(self) -> SimpleService<::aws_smithy_http_server::routing::Route<Body>>
     where
         Body: Send + 'static,
     {
-        let router = aws_smithy_http_server::proto::rest::router::RestRouter::from_iter([(
-                        request_specs::operation(),
-                        self.operation.unwrap_or_else(|| {
-                            aws_smithy_http_server::routing::Route::new(<aws_smithy_http_server::operation::FailOnMissingOperation as aws_smithy_http_server::operation::Upgradable<
-                                aws_smithy_http_server::proto::rest_json_1::RestJson1,
-                                crate::operation_shape::Operation,
-                                (),
-                                _,
-                                _,
-                            >>::upgrade(aws_smithy_http_server::operation::FailOnMissingOperation, &self.plugin))
-                        })
-                    ),]);
+        let router = ::aws_smithy_http_server::protocol::rest::router::RestRouter::from_iter([(
+            request_specs::operation(),
+            self.operation.unwrap_or_else(|| {
+                let svc = ::aws_smithy_http_server::operation::MissingFailure::<
+                    ::aws_smithy_http_server::protocol::rest_json_1::RestJson1,
+                >::default();
+                ::aws_smithy_http_server::routing::Route::new(svc)
+            }),
+        )]);
         SimpleService {
-            router: aws_smithy_http_server::routing::RoutingService::new(router),
+            router: ::aws_smithy_http_server::routing::RoutingService::new(router),
         }
     }
 }
@@ -145,7 +221,8 @@ impl<Body, Plugin> SimpleServiceBuilder<Body, Plugin> {
 /// specified.
 #[derive(Debug)]
 pub struct MissingOperationsError {
-    operation_names2setter_methods: std::collections::HashMap<&'static str, &'static str>,
+    operation_names2setter_methods:
+        std::collections::HashMap<::aws_smithy_http_server::shape_id::ShapeId, &'static str>,
 }
 
 impl std::fmt::Display for MissingOperationsError {
@@ -156,7 +233,7 @@ impl std::fmt::Display for MissingOperationsError {
                         We are missing handlers for the following operations:\n",
         )?;
         for operation_name in self.operation_names2setter_methods.keys() {
-            writeln!(f, "- {}", operation_name)?;
+            writeln!(f, "- {}", operation_name.absolute())?;
         }
 
         writeln!(f, "\nUse the dedicated methods on `SimpleServiceBuilder` to register the missing handlers:")?;
@@ -170,24 +247,19 @@ impl std::fmt::Display for MissingOperationsError {
 impl std::error::Error for MissingOperationsError {}
 
 mod request_specs {
-    pub(super) fn operation() -> aws_smithy_http_server::routing::request_spec::RequestSpec {
-        aws_smithy_http_server::routing::request_spec::RequestSpec::new(
-            http::Method::POST,
-            aws_smithy_http_server::routing::request_spec::UriSpec::new(
-                aws_smithy_http_server::routing::request_spec::PathAndQuerySpec::new(
-                    aws_smithy_http_server::routing::request_spec::PathSpec::from_vector_unchecked(
-                        vec![
-                            aws_smithy_http_server::routing::request_spec::PathSegment::Literal(
-                                String::from("operation"),
-                            ),
-                        ],
+    pub(super) fn operation() -> ::aws_smithy_http_server::routing::request_spec::RequestSpec {
+        ::aws_smithy_http_server::routing::request_spec::RequestSpec::new(
+                    ::http::Method::POST,
+                    ::aws_smithy_http_server::routing::request_spec::UriSpec::new(
+                        ::aws_smithy_http_server::routing::request_spec::PathAndQuerySpec::new(
+                            ::aws_smithy_http_server::routing::request_spec::PathSpec::from_vector_unchecked(vec![
+    ::aws_smithy_http_server::routing::request_spec::PathSegment::Literal(String::from("operation")),
+]),
+                            ::aws_smithy_http_server::routing::request_spec::QuerySpec::from_vector_unchecked(vec![
+])
+                        )
                     ),
-                    aws_smithy_http_server::routing::request_spec::QuerySpec::from_vector_unchecked(
-                        vec![],
-                    ),
-                ),
-            ),
-        )
+                )
     }
 }
 
@@ -195,10 +267,10 @@ mod request_specs {
 ///
 /// See the [root](crate) documentation for more information.
 #[derive(Clone)]
-pub struct SimpleService<S = aws_smithy_http_server::routing::Route> {
-    router: aws_smithy_http_server::routing::RoutingService<
-        aws_smithy_http_server::proto::rest::router::RestRouter<S>,
-        aws_smithy_http_server::proto::rest_json_1::RestJson1,
+pub struct SimpleService<S = ::aws_smithy_http_server::routing::Route> {
+    router: ::aws_smithy_http_server::routing::RoutingService<
+        ::aws_smithy_http_server::protocol::rest::router::RestRouter<S>,
+        ::aws_smithy_http_server::protocol::rest_json_1::RestJson1,
     >,
 }
 
@@ -208,77 +280,90 @@ impl SimpleService<()> {
     ///
     /// Use [`SimpleService::builder_without_plugins`] if you don't need to apply plugins.
     ///
-    /// Check out [`PluginPipeline`](aws_smithy_http_server::plugin::PluginPipeline) if you need to apply
+    /// Check out [`HttpPlugins`](::aws_smithy_http_server::plugin::HttpPlugins) and
+    /// [`ModelPlugins`](::aws_smithy_http_server::plugin::ModelPlugins) if you need to apply
     /// multiple plugins.
-    pub fn builder_with_plugins<Body, Plugin>(
-        plugin: Plugin,
-    ) -> SimpleServiceBuilder<Body, Plugin> {
+    pub fn builder_with_plugins<
+        Body,
+        HttpPl: ::aws_smithy_http_server::plugin::HttpMarker,
+        ModelPl: ::aws_smithy_http_server::plugin::ModelMarker,
+    >(
+        http_plugin: HttpPl,
+        model_plugin: ModelPl,
+    ) -> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
         SimpleServiceBuilder {
             operation: None,
-            plugin,
+            http_plugin,
+            model_plugin,
         }
     }
 
     /// Constructs a builder for [`SimpleService`].
     ///
     /// Use [`SimpleService::builder_with_plugins`] if you need to specify plugins.
-    pub fn builder_without_plugins<Body>(
-    ) -> SimpleServiceBuilder<Body, aws_smithy_http_server::plugin::IdentityPlugin> {
-        Self::builder_with_plugins(aws_smithy_http_server::plugin::IdentityPlugin)
+    pub fn builder_without_plugins<Body>() -> SimpleServiceBuilder<
+        Body,
+        ::aws_smithy_http_server::plugin::IdentityPlugin,
+        ::aws_smithy_http_server::plugin::IdentityPlugin,
+    > {
+        Self::builder_with_plugins(
+            ::aws_smithy_http_server::plugin::IdentityPlugin,
+            ::aws_smithy_http_server::plugin::IdentityPlugin,
+        )
     }
 }
 
 impl<S> SimpleService<S> {
     /// Converts [`SimpleService`] into a [`MakeService`](tower::make::MakeService).
-    pub fn into_make_service(self) -> aws_smithy_http_server::routing::IntoMakeService<Self> {
-        aws_smithy_http_server::routing::IntoMakeService::new(self)
+    pub fn into_make_service(self) -> ::aws_smithy_http_server::routing::IntoMakeService<Self> {
+        ::aws_smithy_http_server::routing::IntoMakeService::new(self)
     }
 
-    /// Converts [`SimpleService`] into a [`MakeService`](tower::make::MakeService) with [`ConnectInfo`](aws_smithy_http_server::request::connect_info::ConnectInfo).
+    /// Converts [`SimpleService`] into a [`MakeService`](tower::make::MakeService) with [`ConnectInfo`](::aws_smithy_http_server::request::connect_info::ConnectInfo).
     pub fn into_make_service_with_connect_info<C>(
         self,
-    ) -> aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo<Self, C> {
-        aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo::new(self)
+    ) -> ::aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo<Self, C> {
+        ::aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo::new(self)
     }
 
-    /// Applies a [`Layer`](tower::Layer) uniformly to all routes.
+    /// Applies a [`Layer`](::tower::Layer) uniformly to all routes.
     pub fn layer<L>(self, layer: &L) -> SimpleService<L::Service>
     where
-        L: tower::Layer<S>,
+        L: ::tower::Layer<S>,
     {
         SimpleService {
             router: self.router.map(|s| s.layer(layer)),
         }
     }
 
-    /// Applies [`Route::new`](aws_smithy_http_server::routing::Route::new) to all routes.
+    /// Applies [`Route::new`](::aws_smithy_http_server::routing::Route::new) to all routes.
     ///
     /// This has the effect of erasing all types accumulated via [`layer`](SimpleService::layer).
-    pub fn boxed<B>(self) -> SimpleService<aws_smithy_http_server::routing::Route<B>>
+    pub fn boxed<B>(self) -> SimpleService<::aws_smithy_http_server::routing::Route<B>>
     where
-        S: tower::Service<
-            http::Request<B>,
-            Response = http::Response<aws_smithy_http_server::body::BoxBody>,
+        S: ::tower::Service<
+            ::http::Request<B>,
+            Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>,
             Error = std::convert::Infallible,
         >,
         S: Clone + Send + 'static,
         S::Future: Send + 'static,
     {
-        self.layer(&tower::layer::layer_fn(
-            aws_smithy_http_server::routing::Route::new,
+        self.layer(&::tower::layer::layer_fn(
+            ::aws_smithy_http_server::routing::Route::new,
         ))
     }
 }
 
-impl<B, RespB, S> tower::Service<http::Request<B>> for SimpleService<S>
+impl<B, RespB, S> ::tower::Service<::http::Request<B>> for SimpleService<S>
 where
-    S: tower::Service<http::Request<B>, Response = http::Response<RespB>> + Clone,
-    RespB: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    S: ::tower::Service<::http::Request<B>, Response = ::http::Response<RespB>> + Clone,
+    RespB: ::http_body::Body<Data = ::bytes::Bytes> + Send + 'static,
     RespB::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
-    type Response = http::Response<aws_smithy_http_server::body::BoxBody>;
+    type Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>;
     type Error = S::Error;
-    type Future = aws_smithy_http_server::routing::RoutingFuture<S, B>;
+    type Future = ::aws_smithy_http_server::routing::RoutingFuture<S, B>;
 
     fn poll_ready(
         &mut self,
@@ -287,7 +372,142 @@ where
         self.router.poll_ready(cx)
     }
 
-    fn call(&mut self, request: http::Request<B>) -> Self::Future {
+    fn call(&mut self, request: ::http::Request<B>) -> Self::Future {
         self.router.call(request)
     }
 }
+
+/// An enumeration of all [operations](https://smithy.io/2.0/spec/service-types.html#operation) in SimpleService.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Operation {
+    Operation,
+}
+
+impl Operation {
+    /// Returns the [operations](https://smithy.io/2.0/spec/service-types.html#operation) [`ShapeId`](::aws_smithy_http_server::shape_id::ShapeId).
+    pub fn shape_id(&self) -> ::aws_smithy_http_server::shape_id::ShapeId {
+        match self {
+            Operation::Operation => ::aws_smithy_http_server::shape_id::ShapeId::new(
+                "com.amazonaws.simple#Operation",
+                "com.amazonaws.simple",
+                "Operation",
+            ),
+        }
+    }
+}
+impl ::aws_smithy_http_server::service::ContainsOperation<crate::operation_shape::Operation>
+    for SimpleService
+{
+    const VALUE: Operation = Operation::Operation;
+}
+
+impl ::aws_smithy_http_server::service::ServiceShape for SimpleService {
+    const ID: ::aws_smithy_http_server::shape_id::ShapeId =
+        ::aws_smithy_http_server::shape_id::ShapeId::new(
+            "com.amazonaws.simple#SimpleService",
+            "com.amazonaws.simple",
+            "SimpleService",
+        );
+
+    const VERSION: Option<&'static str> = Some("");
+
+    type Protocol = ::aws_smithy_http_server::protocol::rest_json_1::RestJson1;
+
+    type Operations = Operation;
+}
+/// A macro to help with scoping [plugins](::aws_smithy_http_server::plugin) to a subset of all operations.
+///
+/// In contrast to [`aws_smithy_http_server::scope`](::aws_smithy_http_server::scope), this macro has knowledge
+/// of the service and any operations _not_ specified will be placed in the opposing group.
+///
+/// # Example
+///
+/// ```rust
+/// scope! {
+///     /// Includes [`Operation`], excluding all other operations.
+///     struct ScopeA {
+///         includes: [Operation]
+///     }
+/// }
+///
+/// scope! {
+///     /// Excludes [`Operation`], excluding all other operations.
+///     struct ScopeB {
+///         excludes: [Operation]
+///     }
+/// }
+///
+/// # use ::aws_smithy_http_server::plugin::{Plugin, Scoped};
+/// # use simple::scope;
+/// # struct MockPlugin;
+/// # impl<S, Op, T> Plugin<S, Op, T> for MockPlugin { type Output = u32; fn apply(&self, input: T) -> u32 { 3 } }
+/// # let scoped_a = Scoped::new::<ScopeA>(MockPlugin);
+/// # let scoped_b = Scoped::new::<ScopeB>(MockPlugin);
+/// # let a = Plugin::<(), simple::operation_shape::Operation, u64>::apply(&scoped_a, 6);
+/// # let b = Plugin::<(), simple::operation_shape::Operation, u64>::apply(&scoped_b, 6);
+/// # assert_eq!(a, 3_u32);
+/// # assert_eq!(b, 6_u64);
+/// ```
+#[macro_export]
+macro_rules! scope {
+                // Completed, render impls
+                (@ $ name: ident, $ contains: ident () ($($ temp: ident)*) ($($ not_member: ident)*)) => {
+                    $(
+                        impl ::aws_smithy_http_server::plugin::scoped::Membership<$ temp> for $ name {
+                            type Contains = ::aws_smithy_http_server::plugin::scoped::$ contains;
+                        }
+                    )*
+                    $(
+                        impl ::aws_smithy_http_server::plugin::scoped::Membership<$ not_member> for $ name {
+                            type Contains = ::aws_smithy_http_server::plugin::scoped::$ contains;
+                        }
+                    )*
+                };
+                // All `not_member`s exhausted, move `temp` into `not_member`
+                (@ $ name: ident, $ contains: ident ($($ member: ident)*) ($($ temp: ident)*) ()) => {
+                    scope! { @ $ name, $ contains ($($ member)*) () ($($ temp)*) }
+                };
+
+                // Operation match found, pop from both `member` and `not_member`
+                (@ $ name: ident, $ contains: ident (Operation $($ member: ident)*) ($($ temp: ident)*) (Operation $($ not_member: ident)*)) => {
+                    scope! { @ $ name, $ contains ($($ member)*) ($($ temp)*) ($($ not_member)*) }
+                };
+                // Operation match not found, pop from `not_member` into `temp` stack
+                (@ $ name: ident, $ contains: ident (Operation $($ member: ident)*) ($($ temp: ident)*) ($ other: ident $($ not_member: ident)*)) => {
+                    scope! { @ $ name, $ contains (Operation $($ member)*) ($ other $($ temp)*) ($($ not_member)*) }
+                };
+
+                (
+                    $(#[$ attrs:meta])*
+                    $ vis:vis struct $ name:ident {
+                        includes: [$($ include:ident),*]
+                    }
+                ) => {
+                    use $ crate::operation_shape::*;
+                    ::aws_smithy_http_server::scope! {
+                        $(#[$ attrs])*
+                        $ vis struct $ name {
+                            includes: [$($ include),*],
+                            excludes: []
+                        }
+                    }
+                    scope! { @ $ name, False ($($ include)*) () (Operation) }
+                };
+                (
+                    $(#[$ attrs:meta])*
+                    $ vis:vis struct $ name:ident {
+                        excludes: [$($ exclude:ident),*]
+                    }
+                ) => {
+                    use $ crate::operation_shape::*;
+
+                    ::aws_smithy_http_server::scope! {
+                        $(#[$ attrs])*
+                        $ vis struct $ name {
+                            includes: [],
+                            excludes: [$($ exclude),*]
+                        }
+                    }
+                    scope! { @ $ name, True ($($ exclude)*) () (Operation) }
+                };
+            }
