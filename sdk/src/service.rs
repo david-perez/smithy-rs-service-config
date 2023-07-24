@@ -2,13 +2,14 @@
 /// The service builder for [`SimpleService`].
 ///
 /// Constructed via [`SimpleService::builder_with_plugins`] or [`SimpleService::builder_without_plugins`].
-pub struct SimpleServiceBuilder<Body, HttpPl, ModelPl> {
+pub struct SimpleServiceBuilder<Body, L, HttpPl, ModelPl> {
     operation: Option<::aws_smithy_http_server::routing::Route<Body>>,
+    layer: L,
     http_plugin: HttpPl,
     model_plugin: ModelPl,
 }
 
-impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
+impl<Body, L, HttpPl, ModelPl> SimpleServiceBuilder<Body, L, HttpPl, ModelPl> {
     /// Sets the [`Operation`](crate::operation_shape::Operation) operation.
     ///
     /// This should be an async function satisfying the [`Handler`](::aws_smithy_http_server::operation::Handler) trait.
@@ -17,7 +18,7 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     /// # Example
     ///
     /// ```no_run
-    /// use simple::SimpleService;
+    /// use simple::{Config, SimpleService};
     ///
     /// use simple::{input, output};
     ///
@@ -25,12 +26,13 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     ///     todo!()
     /// }
     ///
-    /// let app = SimpleService::builder_without_plugins()
+    /// let config = Config::builder().build();
+    /// let app = SimpleService::builder(config)
     ///     .operation(handler)
     ///     /* Set other handlers */
     ///     .build()
     ///     .unwrap();
-    /// # let app: SimpleService<::aws_smithy_http_server::routing::Route<::aws_smithy_http::body::SdkBody>> = app;
+    /// # let app: SimpleService<::aws_smithy_http_server::routing::RoutingService<::aws_smithy_http_server::protocol::rest::router::RestRouter<::aws_smithy_http_server::routing::Route>, ::aws_smithy_http_server::protocol::rest_json_1::RestJson1>> = app;
     /// ```
     ///
                 pub fn operation<HandlerType, HandlerExtractors, UpgradeExtractors>(self, handler: HandlerType) -> Self
@@ -38,22 +40,22 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
                     HandlerType: ::aws_smithy_http_server::operation::Handler<crate::operation_shape::Operation, HandlerExtractors>,
 
                     ModelPl: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         ::aws_smithy_http_server::operation::IntoService<crate::operation_shape::Operation, HandlerType>
                     >,
                     ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         ModelPl::Output
                     >,
                     HttpPl: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         <
                             ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>
                             as ::aws_smithy_http_server::plugin::Plugin<
-                                SimpleService,
+                                SimpleService<L>,
                                 crate::operation_shape::Operation,
                                 ModelPl::Output
                             >
@@ -82,7 +84,7 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     /// # Example
     ///
     /// ```no_run
-    /// use simple::SimpleService;
+    /// use simple::{Config, SimpleService};
     ///
     /// use simple::{input, output};
     ///
@@ -90,13 +92,14 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     ///     todo!()
     /// }
     ///
+    /// let config = Config::builder().build();
     /// let svc = ::tower::util::service_fn(handler);
-    /// let app = SimpleService::builder_without_plugins()
+    /// let app = SimpleService::builder(config)
     ///     .operation_service(svc)
     ///     /* Set other handlers */
     ///     .build()
     ///     .unwrap();
-    /// # let app: SimpleService<::aws_smithy_http_server::routing::Route<::aws_smithy_http::body::SdkBody>> = app;
+    /// # let app: SimpleService<::aws_smithy_http_server::routing::RoutingService<::aws_smithy_http_server::protocol::rest::router::RestRouter<::aws_smithy_http_server::routing::Route>, ::aws_smithy_http_server::protocol::rest_json_1::RestJson1>> = app;
     /// ```
     ///
                 pub fn operation_service<S, ServiceExtractors, UpgradeExtractors>(self, service: S) -> Self
@@ -104,22 +107,22 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
                     S: ::aws_smithy_http_server::operation::OperationService<crate::operation_shape::Operation, ServiceExtractors>,
 
                     ModelPl: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         ::aws_smithy_http_server::operation::Normalize<crate::operation_shape::Operation, S>
                     >,
                     ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         ModelPl::Output
                     >,
                     HttpPl: ::aws_smithy_http_server::plugin::Plugin<
-                        SimpleService,
+                        SimpleService<L>,
                         crate::operation_shape::Operation,
                         <
                             ::aws_smithy_http_server::operation::UpgradePlugin::<UpgradeExtractors>
                             as ::aws_smithy_http_server::plugin::Plugin<
-                                SimpleService,
+                                SimpleService<L>,
                                 crate::operation_shape::Operation,
                                 ModelPl::Output
                             >
@@ -158,16 +161,23 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     }
 }
 
-impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
+impl<Body, L, HttpPl, ModelPl> SimpleServiceBuilder<Body, L, HttpPl, ModelPl> {
     /// Constructs a [`SimpleService`] from the arguments provided to the builder.
     ///
     /// Forgetting to register a handler for one or more operations will result in an error.
     ///
     /// Check out [`SimpleServiceBuilder::build_unchecked`] if you'd prefer the service to return status code 500 when an
     /// unspecified route requested.
-    pub fn build(
-        self,
-    ) -> Result<SimpleService<::aws_smithy_http_server::routing::Route<Body>>, MissingOperationsError>
+    pub fn build(self) -> Result<SimpleService<L::Service>, MissingOperationsError>
+    where
+        L: tower::Layer<
+            ::aws_smithy_http_server::routing::RoutingService<
+                ::aws_smithy_http_server::protocol::rest::router::RestRouter<
+                    aws_smithy_http_server::routing::Route<Body>,
+                >,
+                ::aws_smithy_http_server::protocol::rest_json_1::RestJson1,
+            >,
+        >,
     {
         let router = {
             use ::aws_smithy_http_server::operation::OperationShape;
@@ -188,9 +198,12 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
                 self.operation.expect(unexpected_error_msg),
             )])
         };
-        Ok(SimpleService {
-            router: ::aws_smithy_http_server::routing::RoutingService::new(router),
-        })
+        let svc = self
+            .layer
+            .layer(::aws_smithy_http_server::routing::RoutingService::new(
+                router,
+            ));
+        Ok(SimpleService { svc })
     }
 
     /// Constructs a [`SimpleService`] from the arguments provided to the builder.
@@ -198,9 +211,17 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
     ///
     /// Check out [`SimpleServiceBuilder::build`] if you'd prefer the builder to fail if one or more operations do
     /// not have a registered handler.
-    pub fn build_unchecked(self) -> SimpleService<::aws_smithy_http_server::routing::Route<Body>>
+    pub fn build_unchecked(self) -> SimpleService<L::Service>
     where
         Body: Send + 'static,
+        L: tower::Layer<
+            ::aws_smithy_http_server::routing::RoutingService<
+                ::aws_smithy_http_server::protocol::rest::router::RestRouter<
+                    aws_smithy_http_server::routing::Route<Body>,
+                >,
+                ::aws_smithy_http_server::protocol::rest_json_1::RestJson1,
+            >,
+        >,
     {
         let router = ::aws_smithy_http_server::protocol::rest::router::RestRouter::from_iter([(
             request_specs::operation(),
@@ -211,9 +232,12 @@ impl<Body, HttpPl, ModelPl> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
                 ::aws_smithy_http_server::routing::Route::new(svc)
             }),
         )]);
-        SimpleService {
-            router: ::aws_smithy_http_server::routing::RoutingService::new(router),
-        }
+        let svc = self
+            .layer
+            .layer(::aws_smithy_http_server::routing::RoutingService::new(
+                router,
+            ));
+        SimpleService { svc }
     }
 }
 
@@ -267,49 +291,26 @@ mod request_specs {
 ///
 /// See the [root](crate) documentation for more information.
 #[derive(Clone)]
-pub struct SimpleService<S = ::aws_smithy_http_server::routing::Route> {
-    router: ::aws_smithy_http_server::routing::RoutingService<
-        ::aws_smithy_http_server::protocol::rest::router::RestRouter<S>,
-        ::aws_smithy_http_server::protocol::rest_json_1::RestJson1,
-    >,
+pub struct SimpleService<S> {
+    // This is the router wrapped by layers.
+    svc: S,
 }
 
 impl SimpleService<()> {
-    /// Constructs a builder for [`SimpleService`].
-    /// You must specify what plugins should be applied to the operations in this service.
-    ///
-    /// Use [`SimpleService::builder_without_plugins`] if you don't need to apply plugins.
-    ///
-    /// Check out [`HttpPlugins`](::aws_smithy_http_server::plugin::HttpPlugins) and
-    /// [`ModelPlugins`](::aws_smithy_http_server::plugin::ModelPlugins) if you need to apply
-    /// multiple plugins.
-    pub fn builder_with_plugins<
+    pub fn builder<
         Body,
-        HttpPl: ::aws_smithy_http_server::plugin::HttpMarker,
-        ModelPl: ::aws_smithy_http_server::plugin::ModelMarker,
+        L,
+        H: ::aws_smithy_http_server::plugin::HttpMarker,
+        M: ::aws_smithy_http_server::plugin::ModelMarker,
     >(
-        http_plugin: HttpPl,
-        model_plugin: ModelPl,
-    ) -> SimpleServiceBuilder<Body, HttpPl, ModelPl> {
+        config: Config<L, H, M>,
+    ) -> SimpleServiceBuilder<Body, L, H, M> {
         SimpleServiceBuilder {
+            layer: config.layers,
             operation: None,
-            http_plugin,
-            model_plugin,
+            http_plugin: config.http_plugins,
+            model_plugin: config.model_plugins,
         }
-    }
-
-    /// Constructs a builder for [`SimpleService`].
-    ///
-    /// Use [`SimpleService::builder_with_plugins`] if you need to specify plugins.
-    pub fn builder_without_plugins<Body>() -> SimpleServiceBuilder<
-        Body,
-        ::aws_smithy_http_server::plugin::IdentityPlugin,
-        ::aws_smithy_http_server::plugin::IdentityPlugin,
-    > {
-        Self::builder_with_plugins(
-            ::aws_smithy_http_server::plugin::IdentityPlugin,
-            ::aws_smithy_http_server::plugin::IdentityPlugin,
-        )
     }
 }
 
@@ -325,55 +326,25 @@ impl<S> SimpleService<S> {
     ) -> ::aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo<Self, C> {
         ::aws_smithy_http_server::routing::IntoMakeServiceWithConnectInfo::new(self)
     }
-
-    /// Applies a [`Layer`](::tower::Layer) uniformly to all routes.
-    pub fn layer<L>(self, layer: &L) -> SimpleService<L::Service>
-    where
-        L: ::tower::Layer<S>,
-    {
-        SimpleService {
-            router: self.router.map(|s| s.layer(layer)),
-        }
-    }
-
-    /// Applies [`Route::new`](::aws_smithy_http_server::routing::Route::new) to all routes.
-    ///
-    /// This has the effect of erasing all types accumulated via [`layer`](SimpleService::layer).
-    pub fn boxed<B>(self) -> SimpleService<::aws_smithy_http_server::routing::Route<B>>
-    where
-        S: ::tower::Service<
-            ::http::Request<B>,
-            Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>,
-            Error = std::convert::Infallible,
-        >,
-        S: Clone + Send + 'static,
-        S::Future: Send + 'static,
-    {
-        self.layer(&::tower::layer::layer_fn(
-            ::aws_smithy_http_server::routing::Route::new,
-        ))
-    }
 }
 
-impl<B, RespB, S> ::tower::Service<::http::Request<B>> for SimpleService<S>
+impl<S, R> ::tower::Service<R> for SimpleService<S>
 where
-    S: ::tower::Service<::http::Request<B>, Response = ::http::Response<RespB>> + Clone,
-    RespB: ::http_body::Body<Data = ::bytes::Bytes> + Send + 'static,
-    RespB::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+    S: ::tower::Service<R>,
 {
-    type Response = ::http::Response<::aws_smithy_http_server::body::BoxBody>;
+    type Response = S::Response;
     type Error = S::Error;
-    type Future = ::aws_smithy_http_server::routing::RoutingFuture<S, B>;
+    type Future = S::Future;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.router.poll_ready(cx)
+        self.svc.poll_ready(cx)
     }
 
-    fn call(&mut self, request: ::http::Request<B>) -> Self::Future {
-        self.router.call(request)
+    fn call(&mut self, request: R) -> Self::Future {
+        self.svc.call(request)
     }
 }
 
@@ -395,13 +366,13 @@ impl Operation {
         }
     }
 }
-impl ::aws_smithy_http_server::service::ContainsOperation<crate::operation_shape::Operation>
-    for SimpleService
+impl<L> ::aws_smithy_http_server::service::ContainsOperation<crate::operation_shape::Operation>
+    for SimpleService<L>
 {
     const VALUE: Operation = Operation::Operation;
 }
 
-impl ::aws_smithy_http_server::service::ServiceShape for SimpleService {
+impl<L> ::aws_smithy_http_server::service::ServiceShape for SimpleService<L> {
     const ID: ::aws_smithy_http_server::shape_id::ShapeId =
         ::aws_smithy_http_server::shape_id::ShapeId::new(
             "com.amazonaws.simple#SimpleService",
@@ -511,3 +482,80 @@ macro_rules! scope {
                     scope! { @ $ name, True ($($ exclude)*) () (Operation) }
                 };
             }
+#[derive(::std::fmt::Debug)]
+pub struct Config<L, H, M> {
+    layers: L,
+    http_plugins: H,
+    model_plugins: M,
+}
+
+impl Config<(), (), ()> {
+    pub fn builder() -> config::Builder<
+        tower::layer::util::Identity,
+        ::aws_smithy_http_server::plugin::IdentityPlugin,
+        ::aws_smithy_http_server::plugin::IdentityPlugin,
+    > {
+        config::Builder {
+            layers: tower::layer::util::Identity::new(),
+            http_plugins: aws_smithy_http_server::plugin::IdentityPlugin,
+            model_plugins: aws_smithy_http_server::plugin::IdentityPlugin,
+        }
+    }
+}
+
+/// Module hosting the builder for [`Config`].
+pub mod config {
+    use aws_smithy_http_server::plugin::{HttpMarker, ModelMarker, PluginStack};
+    use tower::layer::util::Stack;
+
+    #[derive(::std::fmt::Debug)]
+    pub struct Builder<L, H, M> {
+        pub(crate) layers: L,
+        pub(crate) http_plugins: H,
+        pub(crate) model_plugins: M,
+    }
+
+    impl<L, H, M> Builder<L, H, M> {
+        pub fn layer<NewLayer>(self, layer: NewLayer) -> Builder<Stack<NewLayer, L>, H, M> {
+            Builder {
+                layers: Stack::new(layer, self.layers),
+                http_plugins: self.http_plugins,
+                model_plugins: self.model_plugins,
+            }
+        }
+
+        // We eagerly require `NewPlugin: HttpMarker`, despite not really needing it, because compiler
+        // errors get _substantially_ better if the user makes a mistake.
+        pub fn http_plugin<NewPlugin: HttpMarker>(
+            self,
+            http_plugin: NewPlugin,
+        ) -> Builder<L, PluginStack<NewPlugin, H>, M> {
+            Builder {
+                layers: self.layers,
+                http_plugins: PluginStack::new(http_plugin, self.http_plugins),
+                model_plugins: self.model_plugins,
+            }
+        }
+
+        // We eagerly require `NewPlugin: ModelMarker`, despite not really needing it, because compiler
+        // errors get _substantially_ better if the user makes a mistake.
+        pub fn model_plugin<NewPlugin: ModelMarker>(
+            self,
+            model_plugin: NewPlugin,
+        ) -> Builder<L, H, PluginStack<NewPlugin, M>> {
+            Builder {
+                layers: self.layers,
+                http_plugins: self.http_plugins,
+                model_plugins: PluginStack::new(model_plugin, self.model_plugins),
+            }
+        }
+
+        pub fn build(self) -> super::Config<L, H, M> {
+            super::Config {
+                layers: self.layers,
+                http_plugins: self.http_plugins,
+                model_plugins: self.model_plugins,
+            }
+        }
+    }
+}
